@@ -1,4 +1,6 @@
 // yandexImagesParser.js
+// Тот же парсер Яндекс.Картинок, что у тебя на ПК,
+// адаптированный под Vercel (serverless) через puppeteer-core + chrome-aws-lambda.
 
 import chromium from '@sparticuz/chrome-aws-lambda'
 import puppeteer from 'puppeteer-core'
@@ -12,30 +14,37 @@ import { savePhotos } from './db.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-// ---------- ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ----------
+/**
+ * Запуск браузера:
+ *  - локально: обычный Chrome, как в твоём исходнике
+ *  - на Vercel: специальный Chromium из chrome-aws-lambda
+ */
+async function launchBrowser() {
+  if (process.env.VERCEL) {
+    // Vercel / AWS Lambda окружение
+    const executablePath = await chromium.executablePath() // <-- ВАЖНО: вызываем как функцию!
+    return puppeteer.launch({
+      args: chromium.args,
+      defaultViewport: chromium.defaultViewport,
+      executablePath,
+      headless: chromium.headless
+    })
+  }
 
+  // Локальный запуск (как было у тебя)
+  return puppeteer.launch({
+    headless: true,
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  })
+}
+
+/**
+ * Получаем ссылки с Яндекс.Картинок
+ */
 async function getImages(query, limit = 5) {
-  let browser
+  const browser = await launchBrowser()
 
   try {
-    // На Vercel (serverless) используем chrome-aws-lambda
-    if (process.env.VERCEL) {
-      const executablePath = await chromium.executablePath
-
-      browser = await puppeteer.launch({
-        args: chromium.args,
-        defaultViewport: chromium.defaultViewport,
-        executablePath,
-        headless: chromium.headless,
-      })
-    } else {
-      // Локальный запуск на твоём ПК
-      browser = await puppeteer.launch({
-        headless: true,
-        args: ['--no-sandbox', '--disable-setuid-sandbox'],
-      })
-    }
-
     const page = await browser.newPage()
 
     await page.setUserAgent(
@@ -53,7 +62,6 @@ async function getImages(query, limit = 5) {
       'img',
       (imgs, limitInner) => {
         const result = []
-
         for (const img of imgs) {
           let src =
             img.src ||
@@ -64,18 +72,14 @@ async function getImages(query, limit = 5) {
           if (!src) continue
           if (src.startsWith('//')) src = 'https:' + src
           if (!src.startsWith('http')) continue
-
-          // отфильтруем сторонний мусор, оставим только яндексовые CDN
           if (
             !/yandex\.net|yastatic\.net|avatars\.mds\.yandex\.net/i.test(src)
           ) {
             continue
           }
-
           result.push(src)
           if (result.length >= limitInner) break
         }
-
         return result
       },
       limit
@@ -83,28 +87,24 @@ async function getImages(query, limit = 5) {
 
     return urls
   } finally {
-    if (browser) {
-      await browser.close()
-    }
+    await browser.close()
   }
 }
 
+/**
+ * Скачивает одну картинку по URL в указанный путь
+ */
 async function downloadImage(url, filepath) {
-  // В Node 20 fetch глобальный – node-fetch не нужен
   const res = await fetch(url)
-
   if (!res.ok) {
     throw new Error(`Ошибка скачивания ${url}: ${res.status}`)
   }
-
   const buffer = Buffer.from(await res.arrayBuffer())
   await fs.promises.writeFile(filepath, buffer)
 }
 
-// ---------- ОСНОВНАЯ ФУНКЦИЯ ПАРСЕРА ----------
-
 /**
- * Запуск парсера:
+ * Основная функция парсера:
  *  - routeId / pointIndex — какая точка маршрута
  *  - city / pointTitle   — текст для поиска
  *  - limit               — сколько картинок вытаскиваем
@@ -114,14 +114,14 @@ export async function runParser({
   pointIndex,
   city,
   pointTitle,
-  limit = 5,
+  limit = 5
 }) {
   const query = `${city || ''} ${pointTitle || ''}`.trim()
 
-  console.log('[parser] Старт парсинга', {
+  console.log('[parser] Старт парсинга Yandex', {
     routeId,
     pointIndex,
-    query,
+    query
   })
 
   if (!query) {
@@ -129,13 +129,13 @@ export async function runParser({
     return
   }
 
-  // 1. Парсим ссылки из Яндекс.Картинок
+  // 1. Берём ссылки из Яндекс.Картинок
   const urls = await getImages(query, limit)
   console.log('[parser] Найдено ссылок:', urls.length)
 
   if (!urls.length) return
 
-  // 2. Скачиваем во временную директорию (на Vercel пишем в /tmp)
+  // 2. Скачиваем картинки во временную директорию (/tmp на Vercel)
   const tmpBase = os.tmpdir()
   const tmpDir = path.join(
     tmpBase,
@@ -169,7 +169,7 @@ export async function runParser({
     }
   }
 
-  // 3. Сохраняем ссылки в БД (SQLite в /tmp)
+  // 3. Сохраняем ссылки в БД
   if (uploadedUrls.length > 0) {
     savePhotos(routeId, pointIndex, uploadedUrls)
     console.log(
