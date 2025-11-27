@@ -1,6 +1,6 @@
 // yandexImagesParser.js
-// Тот же парсер Яндекс.Картинок, что у тебя на ПК,
-// адаптированный под Vercel (serverless) через puppeteer-core + chrome-aws-lambda.
+// Парсер Яндекс.Картинок, адаптированный под Vercel (serverless)
+// с использованием puppeteer-core + @sparticuz/chrome-aws-lambda.
 
 import chromium from '@sparticuz/chrome-aws-lambda'
 import puppeteer from 'puppeteer-core'
@@ -16,22 +16,28 @@ const __dirname = path.dirname(__filename)
 
 /**
  * Запуск браузера:
- *  - локально: обычный Chrome, как в твоём исходнике
+ *  - локально: обычный Chrome (как в твоём исходнике)
  *  - на Vercel: специальный Chromium из chrome-aws-lambda
  */
 async function launchBrowser() {
   if (process.env.VERCEL) {
     // Vercel / AWS Lambda окружение
-    const executablePath = await chromium.executablePath() // <-- ВАЖНО: вызываем как функцию!
+    let executablePath = chromium.executablePath
+
+    // В разных версиях chrome-aws-lambda executablePath — или функция, или строка
+    if (typeof executablePath === 'function') {
+      executablePath = await executablePath()
+    }
+
     return puppeteer.launch({
-      args: chromium.args,
-      defaultViewport: chromium.defaultViewport,
+      args: chromium.args || [],
+      defaultViewport: chromium.defaultViewport || null,
       executablePath,
-      headless: chromium.headless
+      headless: chromium.headless ?? true
     })
   }
 
-  // Локальный запуск (как было у тебя)
+  // Локальный запуск (как у тебя на ПК)
   return puppeteer.launch({
     headless: true,
     args: ['--no-sandbox', '--disable-setuid-sandbox']
@@ -49,7 +55,7 @@ async function getImages(query, limit = 5) {
 
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-        '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        '(KHTML, как Gecko) Chrome/120.0.0.0 Safari/537.36'
     )
 
     const url =
@@ -92,7 +98,7 @@ async function getImages(query, limit = 5) {
 }
 
 /**
- * Скачивает одну картинку по URL в указанный путь
+ * Скачиваем одну картинку
  */
 async function downloadImage(url, filepath) {
   const res = await fetch(url)
