@@ -35,7 +35,8 @@ export default async function handler(req, res) {
     }
 
     const slugCity = cityToSlug(city)
-    const prefix = `${slugCity}/${routeId}/point_${pointIdx}/`
+    const prefix = `progid-images/${city}/${routeId}/point_${pointIdx}/`
+
 
     // 1. Пробуем найти фото в облаке
     let photos = await listPhotosByPrefix(prefix)
