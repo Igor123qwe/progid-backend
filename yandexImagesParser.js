@@ -1,6 +1,6 @@
 // yandexImagesParser.js
 // Парсер Яндекс.Картинок, адаптированный под Vercel (serverless)
-// с использованием puppeteer-core + @sparticuz/chrome-aws-lambda.
+// c puppeteer-core + @sparticuz/chrome-aws-lambda.
 
 import chromium from '@sparticuz/chrome-aws-lambda'
 import puppeteer from 'puppeteer-core'
@@ -14,11 +14,6 @@ import { savePhotos } from './db.js'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
 
-/**
- * Запуск браузера:
- *  - локально: обычный Chrome (как в твоём исходнике)
- *  - на Vercel: специальный Chromium из chrome-aws-lambda
- */
 async function launchBrowser() {
   if (process.env.VERCEL) {
     // Vercel / AWS Lambda окружение
@@ -33,14 +28,14 @@ async function launchBrowser() {
       args: chromium.args || [],
       defaultViewport: chromium.defaultViewport || null,
       executablePath,
-      headless: chromium.headless ?? true
+      headless: chromium.headless ?? true,
     })
   }
 
-  // Локальный запуск (как у тебя на ПК)
+  // Локальный запуск на твоём ПК
   return puppeteer.launch({
     headless: true,
-    args: ['--no-sandbox', '--disable-setuid-sandbox']
+    args: ['--no-sandbox', '--disable-setuid-sandbox'],
   })
 }
 
@@ -55,7 +50,7 @@ async function getImages(query, limit = 5) {
 
     await page.setUserAgent(
       'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 ' +
-        '(KHTML, как Gecko) Chrome/120.0.0.0 Safari/537.36'
+        '(KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
     )
 
     const url =
@@ -120,14 +115,14 @@ export async function runParser({
   pointIndex,
   city,
   pointTitle,
-  limit = 5
+  limit = 5,
 }) {
   const query = `${city || ''} ${pointTitle || ''}`.trim()
 
   console.log('[parser] Старт парсинга Yandex', {
     routeId,
     pointIndex,
-    query
+    query,
   })
 
   if (!query) {

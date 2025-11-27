@@ -19,7 +19,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // 1. Пробуем взять фото из БД
+    // 1. Пробуем достать фото из БД
     let photos = await getPhotos(routeId, pointIdx)
 
     if (Array.isArray(photos) && photos.length > 0) {
@@ -29,7 +29,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // 2. Если в БД нет — запускаем парсер и ЖДЁМ его завершения
+    // 2. Если нет — запускаем парсер и ЖДЁМ
     await runParser({
       routeId,
       pointIndex: pointIdx,
@@ -37,7 +37,7 @@ export default async function handler(req, res) {
       pointTitle: title,
     })
 
-    // 3. Ещё раз читаем из БД — вдруг парсер что-то добавил
+    // 3. Ещё раз читаем из БД
     photos = await getPhotos(routeId, pointIdx)
 
     if (Array.isArray(photos) && photos.length > 0) {
@@ -47,7 +47,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // 4. Если парсер ничего не нашёл/не сохранил — всё ещё pending
+    // 4. Парсер ничего не нашёл / не сохранил
     return res.status(200).json({
       status: 'pending',
       photos: [],

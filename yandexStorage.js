@@ -1,7 +1,6 @@
 // yandexStorage.js
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
 import fs from 'fs'
-import path from 'path'
 
 const BUCKET = process.env.YC_BUCKET || 'progid-images'
 
@@ -21,6 +20,7 @@ export const s3 = new S3Client({
 })
 
 export async function uploadFile(localPath, key) {
+  // 👇 ЧИТАЕМ ФАЙЛ В БУФЕР, НЕ ПРОМИС
   const fileData = await fs.promises.readFile(localPath)
 
   const command = new PutObjectCommand({
