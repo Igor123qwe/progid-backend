@@ -4,8 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "echo \"no build step\"",
-    "start": "node server.js"
+    "build": "echo \"no build step\""
   },
   "engines": {
     "node": "20.x"
