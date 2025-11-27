@@ -4,9 +4,23 @@ import { listPhotosByPrefix, cityToSlug } from '../yandexStorage.js'
 
 const PARSER_ENDPOINT = process.env.PARSER_ENDPOINT || '' // URL ngrok, оканчивающийся на /parse
 
+function setCors(res) {
+  res.setHeader('Access-Control-Allow-Origin', '*')
+  res.setHeader('Access-Control-Allow-Methods', 'GET,OPTIONS')
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
+}
+
 export default async function handler(req, res) {
+  // --- CORS для всех запросов ---
+  setCors(res)
+
+  // preflight-запрос браузера
+  if (req.method === 'OPTIONS') {
+    return res.status(204).end()
+  }
+
   if (req.method !== 'GET') {
-    res.setHeader('Allow', 'GET')
+    res.setHeader('Allow', 'GET,OPTIONS')
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
