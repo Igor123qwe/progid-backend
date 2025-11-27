@@ -1,5 +1,5 @@
 // yandexStorage.js
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3'
+import { S3Client, PutObjectCommand, ListObjectsV2Command } from '@aws-sdk/client-s3'
 import fs from 'fs'
 
 const BUCKET = process.env.YC_BUCKET || 'progid-images'
@@ -19,8 +19,12 @@ export const s3 = new S3Client({
   },
 })
 
+export function makePublicUrl(key) {
+  return `https://storage.yandexcloud.net/${BUCKET}/${key}`
+}
+
 export async function uploadFile(localPath, key) {
-  // 👇 ЧИТАЕМ ФАЙЛ В БУФЕР, НЕ ПРОМИС
+  // читаем файл в буфер (НЕ Promise)
   const fileData = await fs.promises.readFile(localPath)
 
   const command = new PutObjectCommand({
@@ -33,7 +37,21 @@ export async function uploadFile(localPath, key) {
 
   await s3.send(command)
 
-  return `https://storage.yandexcloud.net/${BUCKET}/${key}`
+  return makePublicUrl(key)
+}
+
+export async function listPhotosByPrefix(prefix) {
+  const cmd = new ListObjectsV2Command({
+    Bucket: BUCKET,
+    Prefix: prefix,
+  })
+
+  const resp = await s3.send(cmd)
+  const contents = resp.Contents || []
+
+  return contents
+    .filter((obj) => !!obj.Key)
+    .map((obj) => makePublicUrl(obj.Key))
 }
 
 // helper чтобы немного нормализовать имя города в пути
@@ -45,3 +63,5 @@ export function cityToSlug(city = '') {
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '') || 'unknown'
 }
+
+export { BUCKET }

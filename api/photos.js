@@ -1,7 +1,8 @@
 // api/photos.js
 
-import { getPhotos } from '../db.js'
-import { runParser } from '../yandexImagesParser.js'
+import { listPhotosByPrefix, cityToSlug } from '../yandexStorage.js'
+
+const PARSER_ENDPOINT = process.env.PARSER_ENDPOINT || '' // URL ngrok, оканчивающийся на /parse
 
 export default async function handler(req, res) {
   if (req.method !== 'GET') {
@@ -19,35 +20,62 @@ export default async function handler(req, res) {
       })
     }
 
-    // 1. Пробуем достать фото из БД
-    let photos = await getPhotos(routeId, pointIdx)
+    const slugCity = cityToSlug(city)
+    const prefix = `${slugCity}/route_${routeId}/point_${pointIdx}/`
 
-    if (Array.isArray(photos) && photos.length > 0) {
+    // 1. Пробуем найти фото в облаке
+    let photos = await listPhotosByPrefix(prefix)
+
+    if (photos.length > 0) {
       return res.status(200).json({
         status: 'done',
         photos,
       })
     }
 
-    // 2. Если нет — запускаем парсер и ЖДЁМ
-    await runParser({
-      routeId,
-      pointIndex: pointIdx,
-      city,
-      pointTitle: title,
-    })
+    // 2. Фото нет — дергаем локальный парсер, если указан PARSER_ENDPOINT
+    if (PARSER_ENDPOINT) {
+      try {
+        const response = await fetch(PARSER_ENDPOINT, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            routeId,
+            pointIndex: pointIdx,
+            city,
+            title,
+          }),
+        })
 
-    // 3. Ещё раз читаем из БД
-    photos = await getPhotos(routeId, pointIdx)
+        if (response.ok) {
+          const data = await response.json()
+          if (Array.isArray(data.photos) && data.photos.length > 0) {
+            // парсер уже вернул готовые URL
+            return res.status(200).json({
+              status: 'done',
+              photos: data.photos,
+            })
+          }
+        } else {
+          console.error('[photos] Парсер вернул статус', response.status)
+        }
+      } catch (e) {
+        console.error('[photos] Ошибка запроса к парсеру', e)
+      }
+    }
 
-    if (Array.isArray(photos) && photos.length > 0) {
+    // 3. Даже если парсер не ответил/упал, ещё раз глянем в бакет —
+    //    вдруг он успел хоть что-то залить
+    photos = await listPhotosByPrefix(prefix)
+
+    if (photos.length > 0) {
       return res.status(200).json({
         status: 'done',
         photos,
       })
     }
 
-    // 4. Парсер ничего не нашёл / не сохранил
+    // Пока фоток нет
     return res.status(200).json({
       status: 'pending',
       photos: [],
