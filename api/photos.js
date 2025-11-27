@@ -1,8 +1,8 @@
 // api/photos.js
 
-import { listPhotosByPrefix, cityToSlug } from '../yandexStorage.js'
+import { listPhotosByPrefix } from '../yandexStorage.js'
 
-const PARSER_ENDPOINT = process.env.PARSER_ENDPOINT || '' // URL ngrok, оканчивающийся на /parse
+const PARSER_ENDPOINT = process.env.PARSER_ENDPOINT || '' // URL до парсера, заканчивается на /parse
 
 function setCors(res) {
   res.setHeader('Access-Control-Allow-Origin', '*')
@@ -34,9 +34,11 @@ export default async function handler(req, res) {
       })
     }
 
-    const slugCity = cityToSlug(city)
-    const prefix = `progid-images/${city}/${routeId}/point_${pointIdx}/`
+    // ключ города так же, как в бакете
+    const cityKey = (city || '').trim().toLowerCase()
 
+    // путь в бакете: <город>/<routeId>/point_<index>/
+    const prefix = `${cityKey}/${routeId}/point_${pointIdx}/`
 
     // 1. Пробуем найти фото в облаке
     let photos = await listPhotosByPrefix(prefix)
@@ -48,7 +50,7 @@ export default async function handler(req, res) {
       })
     }
 
-    // 2. Фото нет — дергаем локальный парсер, если указан PARSER_ENDPOINT
+    // 2. Фото нет — дергаем парсер, если указан PARSER_ENDPOINT
     if (PARSER_ENDPOINT) {
       try {
         const response = await fetch(PARSER_ENDPOINT, {
@@ -56,16 +58,18 @@ export default async function handler(req, res) {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             routeId,
-            pointIndex: pointIdx,
-            city,
+            pointIndex: pointIdx, // число
+            city: cityKey,        // тот же ключ, что и в бакете
             title,
+            limit: 5,
           }),
         })
 
         if (response.ok) {
           const data = await response.json()
+
+          // Если парсер уже вернул готовые URL — сразу отдаем
           if (Array.isArray(data.photos) && data.photos.length > 0) {
-            // парсер уже вернул готовые URL
             return res.status(200).json({
               status: 'done',
               photos: data.photos,
