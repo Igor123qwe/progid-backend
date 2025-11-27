@@ -1,24 +1,14 @@
-// index.js — entrypoint для Node.js Express Runtime на Vercel
-// У тебя "type": "module", поэтому используем import
+// api/index.js
+// Главный endpoint: GET /api
 
-import express from 'express';
+export default function handler(req, res) {
+  if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET');
+    return res.status(405).json({ error: 'Method not allowed' });
+  }
 
-const app = express();
-
-app.use(express.json());
-
-// базовый маршрут — чтобы мини-приложение могло проверить, жив ли бэкенд
-app.get('/', (req, res) => {
-  res.json({
+  return res.status(200).json({
     ok: true,
-    message: 'ProGid backend is running',
+    message: 'Progid backend is running (serverless /api)',
   });
-});
-
-// пример доп. маршрута
-app.get('/ping', (req, res) => {
-  res.json({ ok: true, ts: Date.now() });
-});
-
-// 🎯 КЛЮЧЕВОЕ: для Vercel нужно экспортировать app, НЕ вызывать app.listen()
-export default app;
+}
