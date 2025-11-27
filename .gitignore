@@ -1,0 +1,9 @@
+node_modules
+.env
+npm-debug.log*
+.DS_Store
+tmp
+data.sqlite
+test.jpg
+upload-test.js
+Текстовый документ.txt
