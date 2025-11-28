@@ -44,15 +44,19 @@ export default async function handler(req, res) {
     // 1. Пытаемся найти уже загруженные фотки
     let existing = (await listPhotosByPrefix(prefix)) || []
 
-    if (existing.length) {
+    // 👉 если уже хватает фоток (не меньше limit) — просто отдаём
+    if (existing.length >= limit) {
       return res.status(200).json({
         status: 'done',
-        photos: existing,
+        photos: existing.slice(0, limit),
       })
     }
 
-    // 2. Фоток ещё нет — триггерим парсер (parse-places)
+    // 2. Фоток меньше, чем нужно — триггерим парсер (parse-places)
     if (PARSER_ENDPOINT) {
+      // сколько ещё нужно фоток, минимум 1
+      const need = Math.max(limit - existing.length, 1)
+
       // PARSER_ENDPOINT ожидаем вида .../parse
       const base = PARSER_ENDPOINT.replace(/\/parse\/?$/, '')
       const endpoint = `${base}/parse-places`
@@ -65,7 +69,8 @@ export default async function handler(req, res) {
           },
           body: JSON.stringify({
             city,
-            limit,
+            // передаём только недостающее кол-во
+            limit: need,
             places: [
               {
                 id: placeId,
@@ -76,7 +81,7 @@ export default async function handler(req, res) {
         })
       } catch (e) {
         console.error('[placePhotos] Ошибка вызова parse-places', e)
-        // не валим ответ — просто скажем, что фоток пока нет
+        // не валим ответ — просто скажем, что фоток пока нет / не хватает
       }
     } else {
       console.warn(
@@ -90,11 +95,12 @@ export default async function handler(req, res) {
 
     if (existing.length) {
       return res.status(200).json({
-        status: 'done',
-        photos: existing,
+        status: existing.length >= limit ? 'done' : 'partial',
+        photos: existing.slice(0, limit),
       })
     }
 
+    // вообще ничего нет — ждём, пока парсер когда-нибудь докачает
     return res.status(200).json({
       status: 'pending',
       photos: [],
