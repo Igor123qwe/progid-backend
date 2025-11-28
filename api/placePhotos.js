@@ -18,6 +18,7 @@ export default async function handler(req, res) {
   }
 
   if (req.method !== 'GET') {
+    res.setHeader('Allow', 'GET,OPTIONS')
     return res.status(405).json({ error: 'method_not_allowed' })
   }
 
@@ -41,49 +42,57 @@ export default async function handler(req, res) {
     const prefix = `${cityKey}/places/${placeId}/`
 
     // 1. Пытаемся найти уже загруженные фотки
-    const existing = await listPhotosByPrefix(prefix)
+    let existing = (await listPhotosByPrefix(prefix)) || []
 
-    if (existing && existing.length) {
+    if (existing.length) {
       return res.status(200).json({
         status: 'done',
         photos: existing,
       })
     }
 
-    // 2. Фоток ещё нет — триггерим парсер (parse-places) и отвечаем pending
-    if (!PARSER_ENDPOINT) {
-      // парсер не настроен — просто говорим, что пока нет фоток
-      return res.status(200).json({
-        status: 'pending',
-        photos: [],
-      })
+    // 2. Фоток ещё нет — триггерим парсер (parse-places)
+    if (PARSER_ENDPOINT) {
+      // PARSER_ENDPOINT ожидаем вида .../parse
+      const base = PARSER_ENDPOINT.replace(/\/parse\/?$/, '')
+      const endpoint = `${base}/parse-places`
+
+      try {
+        await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            city,
+            limit,
+            places: [
+              {
+                id: placeId,
+                title: title || placeId,
+              },
+            ],
+          }),
+        })
+      } catch (e) {
+        console.error('[placePhotos] Ошибка вызова parse-places', e)
+        // не валим ответ — просто скажем, что фоток пока нет
+      }
+    } else {
+      console.warn(
+        '[placePhotos] PARSER_ENDPOINT не задан — парсер по places не дергаем'
+      )
     }
 
-    const endpoint = PARSER_ENDPOINT.replace(
-      /\/parse\/?$/,
-      '/parse-places'
-    )
+    // 3. после вызова парсера ещё раз проверим бакет —
+    //    вдруг уже успели залиться фотки
+    existing = (await listPhotosByPrefix(prefix)) || []
 
-    try {
-      await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          city,
-          limit,
-          places: [
-            {
-              id: placeId,
-              title: title || placeId,
-            },
-          ],
-        }),
+    if (existing.length) {
+      return res.status(200).json({
+        status: 'done',
+        photos: existing,
       })
-    } catch (e) {
-      console.error('[vercel] Ошибка вызова parse-places', e)
-      // не валим ответ — просто скажем, что фоток пока нет
     }
 
     return res.status(200).json({

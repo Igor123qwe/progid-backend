@@ -41,7 +41,7 @@ export default async function handler(req, res) {
     const prefix = `${cityKey}/${routeId}/point_${pointIdx}/`
 
     // 1. Пробуем найти фото в облаке
-    let photos = await listPhotosByPrefix(prefix)
+    let photos = (await listPhotosByPrefix(prefix)) || []
 
     if (photos.length > 0) {
       return res.status(200).json({
@@ -59,7 +59,7 @@ export default async function handler(req, res) {
           body: JSON.stringify({
             routeId,
             pointIndex: pointIdx, // число
-            city: cityKey,        // тот же ключ, что и в бакете
+            city,                 // отправляем нормальный город, парсер сам сделает cityKey
             title,
             limit: 5,
           }),
@@ -81,11 +81,13 @@ export default async function handler(req, res) {
       } catch (e) {
         console.error('[photos] Ошибка запроса к парсеру', e)
       }
+    } else {
+      console.warn('[photos] PARSER_ENDPOINT не задан — парсер не дергаем')
     }
 
     // 3. Даже если парсер не ответил/упал, ещё раз глянем в бакет —
     //    вдруг он успел хоть что-то залить
-    photos = await listPhotosByPrefix(prefix)
+    photos = (await listPhotosByPrefix(prefix)) || []
 
     if (photos.length > 0) {
       return res.status(200).json({
