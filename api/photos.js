@@ -10,6 +10,25 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type')
 }
 
+// приведение к массиву строк-URL
+function normalizePhotoUrls(raw) {
+  if (!raw) return []
+
+  if (Array.isArray(raw)) {
+    return raw
+      .map(item => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object') {
+          return item.publicUrl || item.url || item.href || null
+        }
+        return null
+      })
+      .filter((u) => typeof u === 'string')
+  }
+
+  return []
+}
+
 export default async function handler(req, res) {
   // --- CORS для всех запросов ---
   setCors(res)
@@ -39,9 +58,11 @@ export default async function handler(req, res) {
 
     // путь в бакете: <город>/<routeId>/point_<index>/
     const prefix = `${cityKey}/${routeId}/point_${pointIdx}/`
+    console.log('[photos] prefix =', prefix)
 
     // 1. Пробуем найти фото в облаке
-    let photos = (await listPhotosByPrefix(prefix)) || []
+    let rawPhotos = (await listPhotosByPrefix(prefix)) || []
+    let photos = normalizePhotoUrls(rawPhotos)
 
     if (photos.length > 0) {
       return res.status(200).json({
@@ -53,6 +74,13 @@ export default async function handler(req, res) {
     // 2. Фото нет — дергаем парсер, если указан PARSER_ENDPOINT
     if (PARSER_ENDPOINT) {
       try {
+        console.log('[photos] call parser', {
+          routeId,
+          pointIdx,
+          city,
+          title,
+        })
+
         const response = await fetch(PARSER_ENDPOINT, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -67,12 +95,14 @@ export default async function handler(req, res) {
 
         if (response.ok) {
           const data = await response.json()
+          console.log('[photos] parser response:', data)
 
-          // Если парсер уже вернул готовые URL — сразу отдаем
-          if (Array.isArray(data.photos) && data.photos.length > 0) {
+          // Если парсер уже вернул готовые URL — нормализуем и отдаём
+          const parserPhotos = normalizePhotoUrls(data.photos)
+          if (parserPhotos.length > 0) {
             return res.status(200).json({
               status: 'done',
-              photos: data.photos,
+              photos: parserPhotos,
             })
           }
         } else {
@@ -85,9 +115,10 @@ export default async function handler(req, res) {
       console.warn('[photos] PARSER_ENDPOINT не задан — парсер не дергаем')
     }
 
-    // 3. Даже если парсер не ответил/упал, ещё раз глянем в бакет —
+    // 3. После парсера ещё раз глянем в бакет —
     //    вдруг он успел хоть что-то залить
-    photos = (await listPhotosByPrefix(prefix)) || []
+    rawPhotos = (await listPhotosByPrefix(prefix)) || []
+    photos = normalizePhotoUrls(rawPhotos)
 
     if (photos.length > 0) {
       return res.status(200).json({
